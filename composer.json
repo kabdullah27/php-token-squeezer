@@ -1,0 +1,48 @@
+{
+    "name": "yourusername/token-squeezer",
+    "description": "General-purpose AI token optimization library for PHP — compress context, reduce costs, boost speed.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["ai", "llm", "token", "optimization", "openai", "claude", "gemini", "laravel"],
+    "authors": [
+        {
+            "name": "Your Name",
+            "email": "you@example.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "guzzlehttp/guzzle": "^7.0",
+        "psr/log": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0",
+        "orchestra/testbench": "^9.0",
+        "mockery/mockery": "^1.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "TokenSqueezer\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "TokenSqueezer\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "TokenSqueezer\\Laravel\\TokenSqueezerServiceProvider"
+            ],
+            "aliases": {
+                "TokenSqueezer": "TokenSqueezer\\Laravel\\Facades\\TokenSqueezer"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true
+    }
+}
