@@ -2,7 +2,7 @@
 
 **General-purpose AI token optimization library for PHP & Laravel.**
 
-Compress context, cut token usage by up to 80%, and call any AI provider through one fluent API — not just for trading, but for *any* domain.
+Compress context, cut token usage by up to 80%, and call any AI provider through one fluent API for *any* domain.
 
 ```
 composer require yourusername/token-squeezer
