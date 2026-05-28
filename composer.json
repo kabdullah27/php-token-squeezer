@@ -1,9 +1,9 @@
 {
-    "name": "yourusername/token-squeezer",
+    "name": "kabdullah27/php-token-squeezer",
     "description": "General-purpose AI token optimization library for PHP — compress context, reduce costs, boost speed.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["ai", "llm", "token", "optimization", "openai", "claude", "gemini", "laravel"],
+    "keywords": ["ai", "llm", "token", "optimization", "openai", "claude", "gemini", "laravel", "mimo", "kimi"],
     "authors": [
         {
             "name": "Your Name",
