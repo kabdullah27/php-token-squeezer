@@ -29,7 +29,7 @@ composer require yourusername/token-squeezer
 ### 1. Install
 
 ```bash
-composer require yourusername/token-squeezer
+composer require kabdullah27/php-token-squeezer
 ```
 
 ### 2. Laravel Setup (auto-discovery works automatically)
