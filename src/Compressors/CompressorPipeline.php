@@ -33,11 +33,25 @@ class CompressorPipeline
         // Flatten nested arrays one level
         $flat = $this->flatten($context);
 
-        // Run through pipeline — each step gets the output string
+        // Run through pipeline
         $result = '';
         foreach ($this->compressors as $compressor) {
-            $result = $compressor->compress($flat);
-            // Update $flat with parsed result for next step if needed
+            if ($result !== '') {
+                if (method_exists($compressor, 'compressString')) {
+                    $result = $compressor->compressString($result);
+                } elseif (method_exists($compressor, 'strip')) {
+                    $result = $compressor->strip($result);
+                } elseif (method_exists($compressor, 'abbreviate')) {
+                    $result = $compressor->abbreviate($result);
+                } else {
+                    $res = $compressor->compress($flat);
+                    if ($res !== '') {
+                        $result = $res;
+                    }
+                }
+            } else {
+                $result = $compressor->compress($flat);
+            }
         }
 
         return $result ?: $this->fallbackSerialize($flat);
@@ -51,6 +65,7 @@ class CompressorPipeline
             CompressMode::MINIMAL    => [new KeyValueCompressor()],
             CompressMode::BALANCED   => [new KeyValueCompressor(), new StopwordStripper(), new PhraseAbbreviator()],
             CompressMode::AGGRESSIVE => [new KeyValueCompressor(), new StopwordStripper(), new PhraseAbbreviator(), new ShortcodeEncoder()],
+            CompressMode::RTK        => [new RtkLogCompressor(), new StopwordStripper(), new PhraseAbbreviator()],
             CompressMode::CUSTOM     => [],
         };
 

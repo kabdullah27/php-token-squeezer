@@ -18,6 +18,7 @@ class PromptBuilder
         protected string $system,
         protected string $user,
         protected array  $variables,
+        protected bool   $caveman = false,
     ) {}
 
     public function build(): BuiltPrompt
@@ -31,10 +32,18 @@ class PromptBuilder
     protected function resolveSystem(): string
     {
         if ($this->system) {
-            return $this->interpolate($this->system);
+            $sys = $this->interpolate($this->system);
+            if ($this->caveman) {
+                $sys .= ' Respond in CVM (caveman) mode: extremely short, remove helper words/articles (a/an/the), rely on raw key-values, fragment sentences, maximum word density.';
+            }
+            return $sys;
         }
 
         $base = 'You are a concise AI analyst. Be precise. No explanations unless asked.';
+
+        if ($this->caveman) {
+            $base .= ' Respond in CVM (caveman) mode: extremely short, remove helper words/articles (a/an/the), rely on raw key-values, fragment sentences, maximum word density.';
+        }
 
         if ($this->format === 'json') {
             $keys = implode(', ', $this->schema);

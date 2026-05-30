@@ -99,6 +99,7 @@ class TokenMonitor
             'claude'  => [0.25, 1.25],   // claude-haiku per 1M
             'gemini'  => [0.075, 0.30],  // gemini-1.5-flash per 1M
             'kimi'    => [0.12, 0.12],   // moonshot-v1-8k per 1M (approx)
+            'mimo'    => [0.14, 0.28],   // mimo-v2.5 per 1M ($0.14/$0.28)
             'ollama'  => [0.0, 0.0],     // local, free
             default   => [0.50, 1.50],
         };

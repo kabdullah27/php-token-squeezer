@@ -27,6 +27,7 @@ class ProviderFactory
             'claude'  => new ClaudeProvider($config, $model),
             'gemini'  => new GeminiProvider($config, $model),
             'kimi'    => new KimiProvider($config, $model),
+            'mimo'    => new MimoProvider($config, $model),
             'ollama'  => new OllamaProvider($config, $model),
             default   => throw new TokenSqueezedException("Unknown AI provider: [{$name}]"),
         };
@@ -239,6 +240,21 @@ class KimiProvider extends OpenAIProvider
     {
         $this->model                  = $this->model ?: ($this->config['model'] ?? 'moonshot-v1-8k');
         $this->config['base_url']     = $this->config['base_url'] ?? 'https://api.moonshot.cn/v1/chat/completions';
+        return parent::complete($messages, $temperature, $maxTokens);
+    }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Xiaomi Mimo Provider (OpenAI-compatible)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class MimoProvider extends OpenAIProvider
+{
+    public function name(): string { return 'mimo'; }
+
+    public function complete(array $messages, float $temperature, int $maxTokens): array
+    {
+        $this->model                  = $this->model ?: ($this->config['model'] ?? 'mimo-v2.5');
+        $this->config['base_url']     = $this->config['base_url'] ?? 'https://api.xiaomimimo.com/v1/chat/completions';
         return parent::complete($messages, $temperature, $maxTokens);
     }
 }

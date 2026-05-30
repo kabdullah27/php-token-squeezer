@@ -46,6 +46,14 @@ return [
             'retries'  => 2,
         ],
 
+        'mimo' => [
+            'api_key'  => env('MIMO_API_KEY'),
+            'model'    => env('MIMO_MODEL', 'mimo-v2.5'),
+            'base_url' => env('MIMO_BASE_URL', 'https://api.xiaomimimo.com/v1/chat/completions'),
+            'timeout'  => 15,
+            'retries'  => 2,
+        ],
+
         'ollama' => [
             'base_url' => env('OLLAMA_URL', 'http://localhost:11434/api/chat'),
             'model'    => env('OLLAMA_MODEL', 'llama3'),

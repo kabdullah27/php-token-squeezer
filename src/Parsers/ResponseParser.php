@@ -46,14 +46,20 @@ class ResponseParser
 
     protected function parseJson(string $raw): array
     {
-        // Try direct decode
-        $decoded = json_decode($raw, true);
+        // Strip control characters (like raw newlines inside strings, BOMs, or \r) that break json_decode
+        $cleanRaw = preg_replace('/[\x00-\x1F\x7F]/', '', $raw);
+        if (empty($cleanRaw)) {
+            $cleanRaw = $raw;
+        }
+
+        // Try direct decode on cleaned raw
+        $decoded = json_decode($cleanRaw, true);
         if (is_array($decoded)) {
             return $this->validate($decoded);
         }
 
-        // Try to extract JSON substring
-        if (preg_match('/\{.*\}/s', $raw, $matches)) {
+        // Try to extract JSON substring on cleaned raw
+        if (preg_match('/\{.*\}/s', $cleanRaw, $matches)) {
             $decoded = json_decode($matches[0], true);
             if (is_array($decoded)) {
                 return $this->validate($decoded);

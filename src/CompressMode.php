@@ -17,5 +17,6 @@ enum CompressMode: string
     case MINIMAL    = 'minimal';
     case BALANCED   = 'balanced';
     case AGGRESSIVE = 'aggressive';
+    case RTK        = 'rtk';
     case CUSTOM     = 'custom';
 }

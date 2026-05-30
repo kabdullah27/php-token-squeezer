@@ -222,3 +222,64 @@ class StateEncoder implements CompressorInterface
         return implode(' ', $parts);
     }
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 6. RtkLogCompressor (RTK mode)
+//    Deduplicates log lines, strips comments, and removes noise/whitespace
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+class RtkLogCompressor implements CompressorInterface
+{
+    public function compress(array $context): string
+    {
+        $parts = [];
+        foreach ($context as $key => $value) {
+            if (is_string($value)) {
+                $value = $this->compressLog($value);
+            }
+            $parts[] = "{$key}:{$value}";
+        }
+        return implode("\n", $parts);
+    }
+
+    public function compressString(string $text): string
+    {
+        return $this->compressLog($text);
+    }
+
+    public function compressLog(string $logText): string
+    {
+        $lines = explode("\n", $logText);
+        $compressed = [];
+        $lastLine = null;
+        $repeatCount = 0;
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            // Skip empty lines & comment lines (starting with #, //, or *)
+            if ($trimmed === '' || str_starts_with($trimmed, '#') || str_starts_with($trimmed, '//') || str_starts_with($trimmed, '*')) {
+                continue;
+            }
+
+            // Deduplicate repeating identical lines
+            if ($trimmed === $lastLine) {
+                $repeatCount++;
+                continue;
+            }
+
+            if ($repeatCount > 0) {
+                $compressed[] = "[repeat x" . ($repeatCount + 1) . "]";
+                $repeatCount = 0;
+            }
+
+            $compressed[] = $trimmed;
+            $lastLine = $trimmed;
+        }
+
+        if ($repeatCount > 0) {
+            $compressed[] = "[repeat x" . ($repeatCount + 1) . "]";
+        }
+
+        return implode("\n", $compressed);
+    }
+}
+

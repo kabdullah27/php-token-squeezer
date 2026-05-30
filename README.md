@@ -13,8 +13,9 @@ composer require yourusername/token-squeezer
 ## Features
 
 - **Fluent chain API** — readable, intuitive, testable
-- **Multi-provider** — OpenAI, Claude, Gemini, Kimi, Ollama, or your own driver
-- **Smart compression** — 3 built-in modes + plugin support
+- **Multi-provider** — OpenAI, Claude, Gemini, Kimi, Mimo, Ollama, or your own driver
+- **Smart compression** — 4 built-in modes (including RTK log compression) + plugin support
+- **Caveman Mode** — force models to output highly compressed replies to save output tokens
 - **Auto-caching** — context-hash keys, pluggable drivers (array / file / redis / laravel)
 - **Schema enforcement** — define expected JSON keys, auto-fill missing
 - **Token monitoring** — usage tracking, cost estimation, latency stats
@@ -204,6 +205,21 @@ $result = TokenSqueezer::analyze()
 
 ---
 
+### System logs cleanup (RTK & Caveman Mode)
+
+```php
+$result = TokenSqueezer::analyze()
+    ->context([
+        'system_logs' => "error: connection failed\nerror: connection failed\nerror: connection failed",
+    ])
+    ->compress(CompressMode::RTK) // 💡 Deduplicates repeating logs & comment lines (RTK logic)
+    ->caveman(true)               // 💡 Instructs AI to reply in extremely brief "caveman" format
+    ->via('mimo')                 // 💡 Uses Xiaomi Mimo provider
+    ->run();
+```
+
+---
+
 ## Advanced Usage
 
 ### Custom System Prompt
@@ -312,7 +328,8 @@ TokenSqueezer::resetUsage();
 |--------------|---------------------------------------------------------------|-----------|
 | `MINIMAL`    | Normalize whitespace, stringify booleans                      | ~20%      |
 | `BALANCED`   | + strip stopwords, abbreviate common phrases                  | ~50%      |
-| `AGGRESSIVE` | + encode to shortcodes, max density, drop all prose           | ~75-80%   |
+| `AGGRESSIVE` | + encode to shortcodes, max density, drop all vowels in keys  | ~75-80%   |
+| `RTK`        | + deduplicate repeating log lines, strip whitespace & comments| ~80-90%   |
 | `CUSTOM`     | Only your plugins run — full control                          | You decide |
 
 ---
@@ -336,6 +353,7 @@ TokenSqueezer::resetUsage();
 | `claude`  | `claude-haiku-4-5-*`  | Great for structured JSON   |
 | `gemini`  | `gemini-1.5-flash`    | Free tier available         |
 | `kimi`    | `moonshot-v1-8k`      | OpenAI-compatible           |
+| `mimo`    | `mimo-v2.5`           | Low cost, OpenAI-compatible |
 | `ollama`  | `llama3`              | Local, zero API cost        |
 | custom    | Your driver           | Implement ProviderInterface |
 
@@ -359,6 +377,10 @@ CLAUDE_MODEL=claude-haiku-4-5-20251001
 
 GEMINI_API_KEY=...
 KIMI_API_KEY=...
+
+MIMO_API_KEY=...
+MIMO_MODEL=mimo-v2.5
+MIMO_BASE_URL=https://api.xiaomimimo.com/v1/chat/completions
 
 OLLAMA_URL=http://localhost:11434/api/chat
 OLLAMA_MODEL=llama3

@@ -29,6 +29,7 @@ class AnalysisBuilder
     // ── Compression ───────────────────────────────────────────────────────────
     protected CompressMode $compressMode = CompressMode::BALANCED;
     protected array $customCompressors   = [];
+    protected bool $caveman              = false;
 
     // ── Output schema ─────────────────────────────────────────────────────────
     protected array  $schema      = [];
@@ -213,7 +214,7 @@ class AnalysisBuilder
     /**
      * Choose the AI provider to use for this request.
      *
-     * @param  string  $provider  'openai' | 'claude' | 'gemini' | 'kimi' | 'ollama'
+     * @param  string  $provider  'openai' | 'claude' | 'gemini' | 'kimi' | 'mimo' | 'ollama'
      * @param  string  $model     Optional model override (e.g. 'gpt-4o-mini')
      * @return static
      */
@@ -223,6 +224,17 @@ class AnalysisBuilder
         if ($model) {
             $this->model = $model;
         }
+        return $this;
+    }
+
+    /**
+     * Enable/disable Caveman mode (high output token density/compression).
+     *
+     * @return static
+     */
+    public function caveman(bool $enabled = true): static
+    {
+        $this->caveman = $enabled;
         return $this;
     }
 
@@ -280,6 +292,7 @@ class AnalysisBuilder
             system:     $this->systemPrompt,
             user:       $this->userPrompt,
             variables:  $this->promptVariables,
+            caveman:    $this->caveman,
         );
         $prompt          = $promptBuilder->build();
 
