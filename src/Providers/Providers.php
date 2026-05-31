@@ -242,6 +242,7 @@ class KimiProvider extends OpenAIProvider
         $this->config['base_url']     = $this->config['base_url'] ?? 'https://api.moonshot.cn/v1/chat/completions';
         return parent::complete($messages, $temperature, $maxTokens);
     }
+}
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Xiaomi Mimo Provider (OpenAI-compatible)
