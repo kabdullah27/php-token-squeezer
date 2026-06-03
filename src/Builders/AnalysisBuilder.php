@@ -11,6 +11,9 @@ use TokenSqueezer\Cache\SmartCache;
 use TokenSqueezer\Parsers\ResponseParser;
 use TokenSqueezer\Providers\ProviderFactory;
 use TokenSqueezer\Exceptions\TokenSqueezedException;
+use TokenSqueezer\Exceptions\FallbackExhaustedException;
+use TokenSqueezer\Exceptions\RateLimitException;
+use TokenSqueezer\RateLimiter\RateLimiter;
 
 /**
  * Fluent builder for AI analysis requests.
@@ -40,6 +43,10 @@ class AnalysisBuilder
     protected int    $maxTokens   = 120;
     protected string $provider    = '';
     protected string $model       = '';
+
+    // ── Fallback Chain ────────────────────────────────────────────────────────
+    /** @var list<string> Additional providers to try if primary fails */
+    protected array $fallbackProviders = [];
 
     // ── Cache ────────────────────────────────────────────────────────────────
     protected bool $cacheEnabled = true;
@@ -228,6 +235,24 @@ class AnalysisBuilder
     }
 
     /**
+     * Define fallback providers to try if the primary provider fails.
+     *
+     * Providers are tried in the order given. A provider is skipped if its
+     * rate limit is already exhausted.
+     *
+     * @param  string  ...$providers  Provider names, e.g. 'claude', 'gemini'
+     * @return static
+     *
+     * @example
+     *   ->via('openai')->fallback('claude', 'gemini')
+     */
+    public function fallback(string ...$providers): static
+    {
+        $this->fallbackProviders = array_values($providers);
+        return $this;
+    }
+
+    /**
      * Enable/disable Caveman mode (high output token density/compression).
      *
      * @return static
@@ -275,17 +300,21 @@ class AnalysisBuilder
     /**
      * Execute the analysis chain and return the parsed response.
      *
+     * Tries the primary provider first. If it fails (connection error or API error),
+     * it falls through to each fallback provider in order.
+     *
      * @return array|string  Parsed JSON as array, or plain text string.
-     * @throws TokenSqueezedException
+     * @throws FallbackExhaustedException  if all providers fail
+     * @throws RateLimitException          if primary provider is rate-limited and no fallback succeeds
      */
     public function run(): array|string
     {
-        // 1. Compress context
-        $pipeline        = new CompressorPipeline($this->compressMode, $this->customCompressors);
-        $compressedCtx   = $pipeline->compress($this->rawContext);
+        // 1. Compress context (once, shared across all provider attempts)
+        $pipeline      = new CompressorPipeline($this->compressMode, $this->customCompressors);
+        $compressedCtx = $pipeline->compress($this->rawContext);
 
-        // 2. Build prompt
-        $promptBuilder   = new PromptBuilder(
+        // 2. Build prompt (once, shared across all provider attempts)
+        $promptBuilder = new PromptBuilder(
             compressed: $compressedCtx,
             schema:     $this->schema,
             format:     $this->outputFormat,
@@ -294,50 +323,71 @@ class AnalysisBuilder
             variables:  $this->promptVariables,
             caveman:    $this->caveman,
         );
-        $prompt          = $promptBuilder->build();
+        $prompt = $promptBuilder->build();
 
-        // 3. Check cache
-        $cache           = new SmartCache($this->config['cache'] ?? []);
-        $cacheKey        = $this->cacheKey ?? $cache->generateKey($this->provider, $compressedCtx, $this->schema);
+        // 3. Check cache (use primary provider name as part of key)
+        $cache    = new SmartCache($this->config['cache'] ?? []);
+        $cacheKey = $this->cacheKey ?? $cache->generateKey($this->provider, $compressedCtx, $this->schema);
 
         if ($this->cacheEnabled && $cached = $cache->get($cacheKey)) {
             $this->monitor?->recordCacheHit($cacheKey);
             return $cached;
         }
 
-        // 4. Send to AI provider
-        $provider = ProviderFactory::make(
-            name:   $this->provider,
-            config: $this->config['providers'][$this->provider] ?? [],
-            model:  $this->model,
-        );
+        // 4. Build provider chain: primary + fallbacks
+        $chain  = array_merge([$this->provider], $this->fallbackProviders);
+        $errors = [];
 
-        $startTime = microtime(true);
-        $rawResponse = $provider->complete(
-            messages:    $prompt->toMessages(),
-            temperature: $this->temperature,
-            maxTokens:   $this->maxTokens,
-        );
-        $elapsed = microtime(true) - $startTime;
+        foreach ($chain as $providerName) {
+            $providerConfig = $this->config['providers'][$providerName] ?? [];
 
-        // 5. Track usage
-        $this->monitor?->record(
-            provider:   $this->provider,
-            inputTokens: $rawResponse['usage']['input_tokens'] ?? 0,
-            outputTokens: $rawResponse['usage']['output_tokens'] ?? 0,
-            latencyMs:  (int) ($elapsed * 1000),
-        );
+            // 4a. Check rate limit before attempting the provider
+            try {
+                RateLimiter::check($providerName, $providerConfig);
+            } catch (RateLimitException $e) {
+                // Rate-limited → record and try next in chain
+                $errors[$providerName] = $e->getMessage();
+                continue;
+            }
 
-        // 6. Parse response
-        $parser = new ResponseParser($this->outputFormat, $this->schema);
-        $result = $parser->parse($rawResponse['content'] ?? '');
+            // 4b. Attempt the provider
+            try {
+                $provider    = ProviderFactory::make($providerName, $providerConfig, $this->model);
+                $startTime   = microtime(true);
+                $rawResponse = $provider->complete(
+                    messages:    $prompt->toMessages(),
+                    temperature: $this->temperature,
+                    maxTokens:   $this->maxTokens,
+                );
+                $elapsed = microtime(true) - $startTime;
 
-        // 7. Store in cache
-        if ($this->cacheEnabled) {
-            $cache->put($cacheKey, $result, $this->cacheTtl);
+                // 4c. Track usage for the provider that succeeded
+                $this->monitor?->record(
+                    provider:     $providerName,
+                    inputTokens:  $rawResponse['usage']['input_tokens']  ?? 0,
+                    outputTokens: $rawResponse['usage']['output_tokens'] ?? 0,
+                    latencyMs:    (int) ($elapsed * 1000),
+                );
+
+                // 4d. Parse response
+                $parser = new ResponseParser($this->outputFormat, $this->schema);
+                $result = $parser->parse($rawResponse['content'] ?? '');
+
+                // 4e. Store in cache
+                if ($this->cacheEnabled) {
+                    $cache->put($cacheKey, $result, $this->cacheTtl);
+                }
+
+                return $result;
+
+            } catch (TokenSqueezedException $e) {
+                // Provider failed → record and try next in chain
+                $errors[$providerName] = $e->getMessage();
+            }
         }
 
-        return $result;
+        // All providers exhausted
+        throw new FallbackExhaustedException($errors);
     }
 
     /**
@@ -365,6 +415,7 @@ class AnalysisBuilder
             'estimated_reduction' => $this->estimateReduction($this->rawContext, $compressedCtx),
             'prompt'              => $prompt->toMessages(),
             'provider'            => $this->provider,
+            'fallback_chain'      => $this->fallbackProviders,
             'temperature'         => $this->temperature,
             'max_tokens'          => $this->maxTokens,
         ];

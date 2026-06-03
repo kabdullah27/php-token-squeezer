@@ -21,6 +21,9 @@ composer require yourusername/token-squeezer
 - **Token monitoring** — usage tracking, cost estimation, latency stats
 - **Zero Laravel dependency** — works in plain PHP too
 - **Dry-run / inspect** — preview prompt + compression without calling AI
+- **Fallback Chain** — auto-retry across multiple providers on failure
+- **Rate Limiter** — per-provider sliding window, prevent 429 errors
+- **Batch Processing** — analyze multiple items with partial-failure safety
 
 ---
 
@@ -216,6 +219,117 @@ $result = TokenSqueezer::analyze()
     ->caveman(true)               // 💡 Instructs AI to reply in extremely brief "caveman" format
     ->via('mimo')                 // 💡 Uses Xiaomi Mimo provider
     ->run();
+```
+
+---
+
+## Fallback Chain
+
+Automatically try the next provider if the primary one fails (timeout, 429, API error).
+
+```php
+TokenSqueezer::analyze()
+    ->context(['symbol' => 'BTC', 'rsi' => 74])
+    ->compress(CompressMode::AGGRESSIVE)
+    ->schema(['trend', 'risk'])
+    ->via('openai')
+    ->fallback('claude', 'gemini')  // tried in order if openai fails
+    ->run();
+```
+
+- Only falls back on `TokenSqueezedException` (network/API errors)
+- Rate-limited providers in the chain are **skipped** automatically
+- Throws `FallbackExhaustedException` if all providers fail (contains per-provider error details)
+
+```php
+use TokenSqueezer\Exceptions\FallbackExhaustedException;
+
+try {
+    $result = TokenSqueezer::analyze()
+        ->context($data)
+        ->via('openai')
+        ->fallback('claude', 'gemini')
+        ->run();
+} catch (FallbackExhaustedException $e) {
+    // $e->errors = ['openai' => 'connection failed', 'claude' => '...']
+    logger()->error('All AI providers failed', $e->errors);
+}
+```
+
+---
+
+## Rate Limiter
+
+Prevent hitting provider rate limits. Sliding window algorithm, in-memory per process.
+
+**Configure via `.env`:**
+
+```env
+TSQ_OPENAI_RATE_LIMIT=60    # max 60 requests
+TSQ_OPENAI_RATE_WINDOW=60   # per 60 seconds
+TSQ_CLAUDE_RATE_LIMIT=40
+TSQ_CLAUDE_RATE_WINDOW=60
+```
+
+**Or in config:**
+
+```php
+'providers' => [
+    'openai' => [
+        'api_key'     => env('OPENAI_API_KEY'),
+        'rate_limit'  => 60,  // 0 = no limit (default)
+        'rate_window' => 60,
+    ],
+],
+```
+
+When the limit is hit, the provider is skipped in the fallback chain, or `RateLimitException` is thrown (with `retryAfterSeconds` property) if no fallback is available.
+
+---
+
+## Batch Processing
+
+Analyze multiple context arrays with one call. Each item runs sequentially with full support for compression, caching, fallback, and rate limiting.
+
+```php
+$results = TokenSqueezer::batch([
+    ['symbol' => 'BTC', 'rsi' => 74, 'trend' => 'bullish'],
+    ['symbol' => 'ETH', 'rsi' => 55, 'trend' => 'neutral'],
+    ['symbol' => 'SOL', 'rsi' => 82, 'trend' => 'overbought'],
+])
+->compress(CompressMode::AGGRESSIVE)
+->schema(['action', 'risk'])
+->temperature(0.1)
+->maxTokens(80)
+->via('openai')
+->fallback('claude')      // fallback applies per item
+->cache(ttl: 300)
+->run();
+
+// $results:
+// [
+//   ['index' => 0, 'result' => ['action' => 'hold', 'risk' => 'medium'], 'error' => null],
+//   ['index' => 1, 'result' => ['action' => 'buy',  'risk' => 'low'],    'error' => null],
+//   ['index' => 2, 'result' => null, 'error' => 'Rate limit exceeded...'],
+// ]
+```
+
+**Stop on first error** (default continues on error):
+
+```php
+TokenSqueezer::batch($items)
+    ->schema(['score'])
+    ->stopOnError()   // abort remaining items if any fails
+    ->run();
+```
+
+**Filter results by success/failure:**
+
+```php
+$results = TokenSqueezer::batch($items)->schema(['score'])->run();
+
+$successes = array_filter($results, fn($r) => $r['error'] === null);
+$failures  = array_filter($results, fn($r) => $r['error'] !== null);
 ```
 
 ---

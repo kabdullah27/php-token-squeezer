@@ -111,9 +111,6 @@ class OpenAIProvider extends BaseProvider
         $model    = $this->model ?: ($this->config['model'] ?? 'gpt-4o-mini');
         $endpoint = $this->config['base_url'] ?? 'https://api.openai.com/v1/chat/completions';
 
-        // Extract system message for response_format
-        $hasSystem = isset($messages[0]) && $messages[0]['role'] === 'system';
-
         $payload = [
             'model'       => $model,
             'messages'    => $messages,

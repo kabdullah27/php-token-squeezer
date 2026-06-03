@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace TokenSqueezer;
 
 use TokenSqueezer\Builders\AnalysisBuilder;
+use TokenSqueezer\Builders\BatchBuilder;
 use TokenSqueezer\Monitors\TokenMonitor;
 use TokenSqueezer\Contracts\ProviderInterface;
 
@@ -34,6 +35,30 @@ class TokenSqueezer
     public static function analyze(): AnalysisBuilder
     {
         return new AnalysisBuilder(static::$config, static::$monitor);
+    }
+
+    /**
+     * Start a batch analysis for multiple context arrays.
+     *
+     * Each item in $items is a context array (same shape as ->context() in AnalysisBuilder).
+     * All shared settings (compress, schema, provider, etc.) are configured via
+     * the returned BatchBuilder using the same fluent API.
+     *
+     * @param  list<array<string, mixed>>  $items
+     *
+     * @example
+     *   TokenSqueezer::batch([
+     *       ['symbol' => 'BTC', 'rsi' => 74],
+     *       ['symbol' => 'ETH', 'rsi' => 55],
+     *   ])
+     *   ->compress(CompressMode::AGGRESSIVE)
+     *   ->schema(['trend', 'risk'])
+     *   ->via('openai')
+     *   ->run();
+     */
+    public static function batch(array $items): BatchBuilder
+    {
+        return new BatchBuilder($items, static::$config, static::$monitor);
     }
 
     /**
