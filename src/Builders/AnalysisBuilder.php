@@ -14,6 +14,10 @@ use TokenSqueezer\Exceptions\TokenSqueezedException;
 use TokenSqueezer\Exceptions\FallbackExhaustedException;
 use TokenSqueezer\Exceptions\RateLimitException;
 use TokenSqueezer\RateLimiter\RateLimiter;
+use TokenSqueezer\Events\EventDispatcher;
+use TokenSqueezer\Events\AnalysisCompleted;
+use TokenSqueezer\Events\AnalysisFailed;
+use TokenSqueezer\Events\CacheHit;
 
 /**
  * Fluent builder for AI analysis requests.
@@ -331,6 +335,7 @@ class AnalysisBuilder
 
         if ($this->cacheEnabled && $cached = $cache->get($cacheKey)) {
             $this->monitor?->recordCacheHit($cacheKey);
+            EventDispatcher::dispatch(new CacheHit($this->provider, $cacheKey));
             return $cached;
         }
 
@@ -378,6 +383,15 @@ class AnalysisBuilder
                     $cache->put($cacheKey, $result, $this->cacheTtl);
                 }
 
+                // 4f. Fire AnalysisCompleted event
+                EventDispatcher::dispatch(new AnalysisCompleted(
+                    provider:      $providerName,
+                    result:        $result,
+                    inputTokens:   $rawResponse['usage']['input_tokens']  ?? 0,
+                    outputTokens:  $rawResponse['usage']['output_tokens'] ?? 0,
+                    latencyMs:     (int) ($elapsed * 1000),
+                ));
+
                 return $result;
 
             } catch (TokenSqueezedException $e) {
@@ -386,7 +400,8 @@ class AnalysisBuilder
             }
         }
 
-        // All providers exhausted
+        // All providers exhausted — fire AnalysisFailed before throwing
+        EventDispatcher::dispatch(new AnalysisFailed($errors));
         throw new FallbackExhaustedException($errors);
     }
 

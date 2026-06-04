@@ -24,6 +24,10 @@ composer require yourusername/token-squeezer
 - **Fallback Chain** — auto-retry across multiple providers on failure
 - **Rate Limiter** — per-provider sliding window, prevent 429 errors
 - **Batch Processing** — analyze multiple items with partial-failure safety
+- **Event Dispatching** — hook into analysis lifecycle (plain PHP + Laravel)
+- **Artisan Commands** — `tsq:usage`, `tsq:inspect`, `tsq:cache:clear`
+
+📄 **Detailed Docs:** [Events](docs/events.md) · [Artisan Commands](docs/commands.md)
 
 ---
 
@@ -331,6 +335,63 @@ $results = TokenSqueezer::batch($items)->schema(['score'])->run();
 $successes = array_filter($results, fn($r) => $r['error'] === null);
 $failures  = array_filter($results, fn($r) => $r['error'] !== null);
 ```
+
+---
+
+## Event Dispatching
+
+Hook into the analysis lifecycle in plain PHP or Laravel.
+
+```php
+use TokenSqueezer\Events\AnalysisCompleted;
+use TokenSqueezer\Events\AnalysisFailed;
+use TokenSqueezer\Events\CacheHit;
+
+// Plain PHP — register once at bootstrap
+TokenSqueezer::listen(AnalysisCompleted::class, function (AnalysisCompleted $e) {
+    error_log("[{$e->provider}] {$e->inputTokens}in/{$e->outputTokens}out — {$e->latencyMs}ms");
+});
+
+TokenSqueezer::listen(AnalysisFailed::class, function (AnalysisFailed $e) {
+    error_log('All AI providers failed: ' . implode(', ', array_keys($e->errors)));
+});
+```
+
+**In Laravel** — use `EventServiceProvider` (recommended):
+
+```php
+// App\Providers\EventServiceProvider
+protected $listen = [
+    \TokenSqueezer\Events\AnalysisCompleted::class => [
+        \App\Listeners\LogAiUsage::class,
+    ],
+    \TokenSqueezer\Events\AnalysisFailed::class => [
+        \App\Listeners\AlertOnAiFailure::class,
+    ],
+];
+```
+
+> 📄 Full docs: [docs/events.md](docs/events.md)
+
+---
+
+## Artisan Commands
+
+```bash
+# View accumulated token/cost stats (cross-request, persisted in cache)
+php artisan tsq:usage
+
+# Reset accumulated stats
+php artisan tsq:usage --reset
+
+# Dry-run: see compressed context + prompt without calling AI
+php artisan tsq:inspect --context='{"symbol":"BTC","rsi":74}' --mode=aggressive
+
+# Clear all TSQ cached responses and stats
+php artisan tsq:cache:clear
+```
+
+> 📄 Full docs: [docs/commands.md](docs/commands.md)
 
 ---
 

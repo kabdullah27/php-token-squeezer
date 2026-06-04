@@ -6,6 +6,8 @@ namespace TokenSqueezer\Builders;
 
 use TokenSqueezer\CompressMode;
 use TokenSqueezer\Monitors\TokenMonitor;
+use TokenSqueezer\Events\EventDispatcher;
+use TokenSqueezer\Events\BatchCompleted;
 
 /**
  * Fluent builder for batch AI analysis.
@@ -201,7 +203,8 @@ class BatchBuilder
      */
     public function run(): array
     {
-        $results = [];
+        $results   = [];
+        $startTime = microtime(true);
 
         foreach ($this->items as $index => $context) {
             $result = $this->runSingle((int) $index, (array) $context);
@@ -211,6 +214,16 @@ class BatchBuilder
                 break;
             }
         }
+
+        $durationMs = (int) ((microtime(true) - $startTime) * 1000);
+        $failed     = count(array_filter($results, fn($r) => $r['error'] !== null));
+
+        EventDispatcher::dispatch(new BatchCompleted(
+            total:      count($results),
+            succeeded:  count($results) - $failed,
+            failed:     $failed,
+            durationMs: $durationMs,
+        ));
 
         return $results;
     }

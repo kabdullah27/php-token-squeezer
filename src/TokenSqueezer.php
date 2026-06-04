@@ -8,6 +8,7 @@ use TokenSqueezer\Builders\AnalysisBuilder;
 use TokenSqueezer\Builders\BatchBuilder;
 use TokenSqueezer\Monitors\TokenMonitor;
 use TokenSqueezer\Contracts\ProviderInterface;
+use TokenSqueezer\Events\EventDispatcher;
 
 /**
  * TokenSqueezer — General-purpose AI token optimization library
@@ -82,7 +83,7 @@ class TokenSqueezer
     }
 
     /**
-     * Retrieve token usage statistics.
+     * Retrieve token usage statistics for the current session.
      */
     public static function usage(): array
     {
@@ -90,11 +91,55 @@ class TokenSqueezer
     }
 
     /**
-     * Reset usage statistics.
+     * Retrieve accumulated cross-request usage stats (requires Laravel + persistence enabled).
+     * Returns null if no stats have been accumulated yet.
+     */
+    public static function persistentUsage(): ?array
+    {
+        return static::$monitor?->persistentSummary();
+    }
+
+    /**
+     * Enable cross-request stats persistence (called automatically in Laravel).
+     * In plain PHP, call this manually if you need persistent stats.
+     */
+    public static function enablePersistentUsage(string $cacheKey = 'tsq:usage_agg'): void
+    {
+        static::$monitor?->enablePersistence($cacheKey);
+    }
+
+    /**
+     * Reset usage statistics for the current session.
      */
     public static function resetUsage(): void
     {
         static::$monitor?->reset();
+    }
+
+    /**
+     * Wipe accumulated persistent usage stats.
+     */
+    public static function resetPersistentUsage(): void
+    {
+        static::$monitor?->resetPersistent();
+    }
+
+    /**
+     * Register a listener for a TokenSqueezer event.
+     *
+     * Works in plain PHP. In Laravel, prefer EventServiceProvider $listen.
+     *
+     * @param  class-string  $eventClass  e.g. AnalysisCompleted::class
+     * @param  callable      $listener
+     *
+     * @example
+     *   TokenSqueezer::listen(AnalysisCompleted::class, function ($e) {
+     *       Log::info('AI done', ['provider' => $e->provider, 'tokens' => $e->inputTokens]);
+     *   });
+     */
+    public static function listen(string $eventClass, callable $listener): void
+    {
+        EventDispatcher::listen($eventClass, $listener);
     }
 
     /**
